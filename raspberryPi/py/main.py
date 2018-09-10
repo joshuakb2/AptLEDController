@@ -5,6 +5,7 @@ except RuntimeError:
     exit(1)
 
 import time
+import socket
 
 pins = {}
 pwm = {}
@@ -32,32 +33,53 @@ def main():
         for color in pwm:
             pwm[color].start(0)
         
-        loop_cli()
+        connect_to_server()
 
     finally:
         GPIO.cleanup()
 
-def loop_cli():
+def connect_to_server():
+    while True:
+        try:
+            s = socket.create_connection(('jbserver.no-ip.org', 15838))
+            print('Connected to server.')
+
+            while True:
+                makeIt = s.recvfrom(1024)[0];
+
+                print('makeIt = "' + makeIt + '".')
+
+                setOutput(makeIt)
+        except BaseException, e:
+            print(e)
+
+def setOutput(state):
     values = {
         'red': rgb(100, 0, 0),
         'green': rgb(0, 100, 0),
         'blue': rgb(0, 0, 100)
     }
 
+    dcs = values.get(state.lower(), None)
+
+    if dcs == None:
+        print('That is not a supported color.')
+    else:
+        print('Setting color to ' + state)
+        for color in pwm:
+            pwm[color].ChangeDutyCycle(dcs[color])
+
+
+def loop_cli():
+    
+
     while True:
         cmd = raw_input('What color? ')
 
         if cmd == 'exit':
-            return
-    
-        dcs = values.get(cmd.lower(), None)
-
-        if dcs == None:
-            print('That is not a supported color.')
-        else:
-            print('Setting color to ' + cmd)
-            for color in pwm:
-                pwm[color].ChangeDutyCycle(dcs[color])
+            return 
+        
+        setOutput(cmd)
 
 def rgb(r, g, b):
     return { 'red': r, 'green': g, 'blue': b }

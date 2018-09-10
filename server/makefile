@@ -1,10 +1,10 @@
-# Variable listing names of all ts files
-TS_FILES = $(wildcard js/*.ts)
+# Build js files from ts files
 
-# For each ts file, use tsc to compile it to a js file.
-$(TS_FILES:%.ts=%.js): %.js: %.ts
-	if [ -f $@ ]; then mv $@ .$@; tsc $< || mv .$@ $@; else tsc $< || rm -f $@; fi
+default: .built
+
+.built: ts/*
+	tsc -b && touch .built
 
 .PHONY: clean
 clean:
-	rm -f $(TS_FILES:%.ts=%.js)
+	rm -f js/* .built
