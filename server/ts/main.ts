@@ -1,7 +1,8 @@
-//  Main.ts
+//  main.ts
 
 var httpServer: any, socketServer: any, livingRoom: any;
 var ctrl_c: boolean = false;
+var httpsSockets: Set<net.Socket> = new Set<net.Socket>();
 
 process.on('SIGINT', function() {
     var httpServerClosed: boolean = false;
@@ -18,6 +19,10 @@ process.on('SIGINT', function() {
         console.log('Caught SIGINT. Disposing of client sockets and servers...');
 
         if (httpServer instanceof http.Server) {
+            httpsSockets.forEach(s => {
+                s.destroy();
+            });
+
             httpServer.close(function() {
                 console.log('HTTP server closed.');
                 httpServerClosed = true;
@@ -26,6 +31,7 @@ process.on('SIGINT', function() {
         }
         else
             httpServerClosed = true;
+
 
         if (socketServer instanceof net.Server) {
             socketServer.close(function() {
@@ -109,29 +115,45 @@ function startSocketServer(): net.Server {
 
 function startHttpServer(): http.Server {
     let server = http.createServer(function(req: http.IncomingMessage, res: http.ServerResponse) {
-        let pathname: string;
-        if (typeof req.url === 'string')
-            pathname = url.parse(req.url).pathname || '<undefined>';
-        else
-            pathname = '<undefined>';
+        try {
+            let pathname: string;
+            if (typeof req.url === 'string')
+                pathname = url.parse(req.url).pathname || '<undefined>';
+            else
+                pathname = '<undefined>';
 
-        let body: string = '';
+            let body: string = '';
 
-        req.on('data', function (data) {
-            body += data;
-        });
+            req.on('data', function (data) {
+                body += data;
+            });
 
-        req.on('end', function (): void {
-            let data = null;
-            try {
-                data = JSON.parse(body);
-            }
-            catch (e) {
-                console.error(e);
-            }
+            req.on('end', function (): void {
+                let data = null;
+                try {
+                    data = JSON.parse(body);
+                }
+                catch (e) {
+                    console.error(e);
+                }
 
-            if (data)
-                handleRequest(pathname, data as WebHookData, res, req.method || '<undefined>');
+                if (data)
+                    handleRequest(pathname, data as WebHookData, res, req.method || '<undefined>');
+            });
+        }
+        finally {
+            res.end();
+
+            console.log('Caught exception and called res.end().');
+        }
+    });
+
+    server.on('connection', function(socket) {
+        httpsSockets.add(socket);
+
+        socket.on('close', function() {
+            socket.destroy();
+            httpsSockets.delete(socket);
         });
     });
     
