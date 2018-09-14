@@ -43,10 +43,8 @@ export class DataForwarder {
 
     dispose(cb?: Function) {
         var leftToClose: number = this.sockets.size;
-
+ 
         var closed = (): void => {
-            leftToClose--;
-
             if (leftToClose === 0) {
                 this.sockets.clear();
                 this.disposing = false;
@@ -61,11 +59,14 @@ export class DataForwarder {
 
             if (this.sockets.size === 0)
                 closed();
-
-            this.sockets.forEach(function(s: net.Socket) {
-                s.on('close', closed);
-                s.end();
-            });
+            else
+                this.sockets.forEach(function(s: net.Socket) {
+                    s.on('close', (): void => {
+                        leftToClose--;
+                        closed();
+                    });
+                    s.end();
+                });
         }
     }
 }

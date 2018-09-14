@@ -1,10 +1,11 @@
-//  Main.ts
+//  main.ts
 
-var httpServer: any, socketServer: any, livingRoom: any;
+var httpsServer: any, socketServer: any, livingRoom: any;
 var ctrl_c: boolean = false;
+var httpsSockets: Set<net.Socket> = new Set<net.Socket>();
 
 process.on('SIGINT', function() {
-    var httpServerClosed: boolean = false;
+    var httpsServerClosed: boolean = false;
     var socketServerClosed: boolean = false;
     var clientSocketsClosed: boolean = false;
 
@@ -17,15 +18,20 @@ process.on('SIGINT', function() {
         console.log();
         console.log('Caught SIGINT. Disposing of client sockets and servers...');
 
-        if (httpServer instanceof http.Server) {
+        if (httpsServer instanceof https.Server) {
+            httpsSockets.forEach(s => {
+                s.destroy();
+            });
+
             httpServer.close(function() {
                 console.log('HTTP server closed.');
-                httpServerClosed = true;
+                httpsServerClosed = true;
                 fin();
             });
         }
         else
-            httpServerClosed = true;
+            httpsServerClosed = true;
+
 
         if (socketServer instanceof net.Server) {
             socketServer.close(function() {
@@ -51,11 +57,12 @@ process.on('SIGINT', function() {
     }
 
     function fin() {
-        if (httpServerClosed && socketServerClosed && clientSocketsClosed)
+        if (httpsServerClosed && socketServerClosed && clientSocketsClosed)
             process.exit(0);
     }
 });
 
+import * as https from 'https';
 import * as http from 'http';
 import * as url from 'url';
 import * as net from 'net';
@@ -78,7 +85,7 @@ var validTokens: Array<Token> = JSON.parse(fs.readFileSync('tokens.json').toStri
 livingRoom = new DataForwarder();
 
 socketServer = startSocketServer();
-httpServer = startHttpServer();
+httpsServer = startHttpsServer();
 
 function startSocketServer(): net.Server {
     let server = net.createServer(function(socket: net.Socket): void {
@@ -107,31 +114,53 @@ function startSocketServer(): net.Server {
     return server;
 }
 
-function startHttpServer(): http.Server {
-    let server = http.createServer(function(req: http.IncomingMessage, res: http.ServerResponse) {
-        let pathname: string;
-        if (typeof req.url === 'string')
-            pathname = url.parse(req.url).pathname || '<undefined>';
-        else
-            pathname = '<undefined>';
+function startHttpsServer(): https.Server {
+    let cert = fs.readFileSync('/etc/ssl/certs/jbserver.no-ip.org.cer');
+    let key = fs.readFileSync('/etc/ssl/private/jbserver.no-ip.org.no-pw.key');
 
-        let body: string = '';
+    let server = https.createServer({
+        cert: cert,
+        key: key
+    }, function(req: http.IncomingMessage, res: http.ServerResponse) {
+        try {
+            let pathname: string;
+            if (typeof req.url === 'string')
+                pathname = url.parse(req.url).pathname || '<undefined>';
+            else
+                pathname = '<undefined>';
 
-        req.on('data', function (data) {
-            body += data;
-        });
+            let body: string = '';
 
-        req.on('end', function (): void {
-            let data = null;
-            try {
-                data = JSON.parse(body);
-            }
-            catch (e) {
-                console.error(e);
-            }
+            req.on('data', function (data) {
+                body += data;
+            });
 
-            if (data)
-                handleRequest(pathname, data as WebHookData, res, req.method || '<undefined>');
+            req.on('end', function (): void {
+                let data = null;
+                try {
+                    data = JSON.parse(body);
+                }
+                catch (e) {
+                    console.error(e);
+                }
+
+                if (data)
+                    handleRequest(pathname, data as WebHookData, res, req.method || '<undefined>');
+            });
+        }
+        finally {
+            res.end();
+
+            console.log('Caught exception and called res.end().');
+        }
+    });
+
+    server.on('connection', function(socket) {
+        httpsSockets.add(socket);
+
+        socket.on('close', function() {
+            socket.destroy();
+            httpsSockets.delete(socket);
         });
     });
     
