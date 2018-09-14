@@ -23,7 +23,7 @@ process.on('SIGINT', function() {
                 s.destroy();
             });
 
-            httpServer.close(function() {
+            httpsServer.close(function() {
                 console.log('HTTP server closed.');
                 httpsServerClosed = true;
                 fin();
@@ -148,10 +148,10 @@ function startHttpsServer(): https.Server {
                     handleRequest(pathname, data as WebHookData, res, req.method || '<undefined>');
             });
         }
-        finally {
+        catch (e) {
             res.end();
-
             console.log('Caught exception and called res.end().');
+            console.error(e);
         }
     });
 

@@ -34,7 +34,7 @@ export class DataForwarder {
             console.log('Forwarding "' + message + '" to ' + this.sockets.size + ' client' + (this.sockets.size === 1 ? '' : 's') + '.');
 
             this.sockets.forEach(function(s: net.Socket) {
-                s.write(message, sent);
+                s.write(message + "\n", sent);
             });
         }
         else
